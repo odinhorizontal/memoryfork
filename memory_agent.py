@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
+from evolution_store import retrieve_revision
 from importer import import_orders
 
 
@@ -42,6 +43,9 @@ def initialize(db):
 
 
 def retrieve(db, project, version, currency):
+    revision = retrieve_revision(db, project, version, currency)
+    if revision:
+        return revision
     # The observation and skill inherit their scope through the source event.
     row = db.execute("""
         SELECT s.id AS skill_id, o.id AS observation_id, e.id AS event_id,
@@ -83,13 +87,18 @@ def main():
     parser.add_argument("project")
     parser.add_argument("orders", type=Path)
     parser.add_argument("memory", type=Path)
-    parser.add_argument("--learn", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--learn", action="store_true")
+    mode.add_argument("--read-only", action="store_true")
     args = parser.parse_args()
     order, = json.loads(args.orders.read_text(encoding="utf-8"))
     session = uuid4().hex
-    with closing(sqlite3.connect(args.memory)) as db:
+    connection = (sqlite3.connect(args.memory.resolve().as_uri() + "?mode=ro", uri=True)
+                  if args.read_only else sqlite3.connect(args.memory))
+    with closing(connection) as db:
         db.row_factory = sqlite3.Row
-        initialize(db)
+        if not args.read_only:
+            initialize(db)
         hit = retrieve(db, args.project, order["version"], order["currency"])
         work = WorkingMemory(order, args.project, hit, hit.get("action", "all-major"))
         for attempt in range(1, 3 if args.learn else 2):
