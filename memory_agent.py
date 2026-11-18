@@ -60,6 +60,15 @@ def retrieve_exact(db, project, version, currency):
     return dict(row) if row else {}
 
 
+def retrieve_flat(db, project, version, currency):
+    row = db.execute("""
+        SELECT id AS event_id, session AS source_session, action
+        FROM events WHERE project = ? AND verdict = 'PASS'
+        ORDER BY ((version = ?) + (currency = ?)) DESC, id DESC LIMIT 1
+    """, (project, version, currency)).fetchone()
+    return dict(row) if row else {}
+
+
 def record(db, session, work, feedback):
     order = work.order
     with db:
@@ -89,8 +98,11 @@ def main():
     parser.add_argument("project")
     parser.add_argument("orders", type=Path)
     parser.add_argument("memory", type=Path)
-    parser.add_argument("--exact", action="store_true",
+    policy = parser.add_mutually_exclusive_group()
+    policy.add_argument("--exact", action="store_true",
                         help="only reuse a skill matching project, version and currency")
+    policy.add_argument("--flat", action="store_true", help="reuse a nearest successful event")
+    policy.add_argument("--no-memory", action="store_true", help="always use the default action")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--learn", action="store_true")
     mode.add_argument("--read-only", action="store_true")
@@ -103,8 +115,8 @@ def main():
         db.row_factory = sqlite3.Row
         if not args.read_only:
             initialize(db)
-        lookup = retrieve_exact if args.exact else retrieve
-        hit = lookup(db, args.project, order["version"], order["currency"])
+        lookup = retrieve_flat if args.flat else retrieve_exact if args.exact else retrieve
+        hit = {} if args.no_memory else lookup(db, args.project, order["version"], order["currency"])
         work = WorkingMemory(order, args.project, hit, hit.get("action", "all-major"))
         for attempt in range(1, 3 if args.learn else 2):
             with closing(sqlite3.connect(f"orders-{attempt}.sqlite")) as orders_db:

@@ -20,8 +20,9 @@ CONTRACTS = {"version": {"v1": 1, "v2": 100}, "currency": {"CNY": 1, "USD": 100}
 EVOLUTION_AGENT = AGENT.with_name("evolution_agent.py")
 
 
-def grade(directory, attempt, order, axis):
-    target = order["amount"] * CONTRACTS[axis][order[axis]]
+def grade(directory, attempt, order, axis, reverse=False):
+    factor = CONTRACTS[axis][order[axis]]
+    target = order["amount"] * (100 // factor if reverse else factor)
     with TemporaryDirectory() as grading_room:
         expected = Path(grading_room) / "expected.json"
         expected.write_text(json.dumps({order["order_id"]: target}), encoding="utf-8")
@@ -60,20 +61,20 @@ def send_grade(process, graded):
     process.stdin.flush()
 
 
-def train_order(directory, memory, order, axis):
+def train_order(directory, memory, order, axis, reverse=False):
     command = session_args(directory, PROJECT, memory, order) + ["--learn"]
     attempts = []
     with learning_process(directory, command) as process:
         for line in process.stdout:
             attempt = json.loads(line)
-            graded = grade(directory, attempt["attempt"], order, axis)
+            graded = grade(directory, attempt["attempt"], order, axis, reverse)
             send_grade(process, graded)
             event = json.loads(process.stdout.readline())
             attempts.append({**attempt, **graded, **event})
     return attempts
 
 
-def evolve(directory, memory, axis):
+def evolve(directory, memory, axis, reverse=False):
     directory.mkdir()
     command = [sys.executable, str(EVOLUTION_AGENT), PROJECT, os.path.relpath(memory, directory)]
     attempts = []
@@ -86,7 +87,7 @@ def evolve(directory, memory, axis):
                 break
             if message["type"] != "attempt":
                 raise ValueError(f"Unexpected evolution message {message}")
-            graded = grade(directory, message["attempt"], plan["order"], axis)
+            graded = grade(directory, message["attempt"], plan["order"], axis, reverse)
             attempts.append({**message, **graded})
             send_grade(process, graded)
         else:
@@ -98,12 +99,12 @@ def evolve(directory, memory, axis):
     return plan, attempts, result
 
 
-def frozen_trial(directory, project, memory, order, axis):
-    command = session_args(directory, project, memory, order) + ["--read-only"]
+def frozen_trial(directory, project, memory, order, axis, reverse=False, policy=()):
+    command = session_args(directory, project, memory, order) + ["--read-only", *policy]
     # check_output returns only once the Agent exits. This process receives no feedback.
     attempt = json.loads(subprocess.check_output(command, cwd=directory, text=True,
                                                  stdin=subprocess.DEVNULL))
-    return {**attempt, **grade(directory, attempt["attempt"], order, axis)}
+    return {**attempt, **grade(directory, attempt["attempt"], order, axis, reverse)}
 
 
 def experiment(root, axis):
