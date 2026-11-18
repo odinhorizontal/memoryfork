@@ -1,0 +1,4 @@
+[
+  {"order_id": "D1", "version": "v1", "currency": "CNY", "amount": 1250},
+  {"order_id": "D2", "version": "v2", "currency": "USD", "amount": 12}
+]
