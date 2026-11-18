@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, mkdtemp
 
 from demo_evolve import EVOLUTION_AGENT, experiment, frozen_trial, train_order
-from demo_memory import PROJECT
+from demo_memory import PROJECT, command as step_two_command
 
 
 class EvolutionTests(unittest.TestCase):
@@ -89,6 +89,15 @@ class EvolutionTests(unittest.TestCase):
                 self.assertEqual(blind["attempt"], 1)
                 self.assertEqual(blind["verdict"], "PASS")
                 self.assertEqual(blind["retrieved"]["revision_id"], run["result"]["revision_id"])
+                # Replay this holdout through Step 2 against the very same active revision.
+                root = run["memory"].parent
+                directory = root / "exact-holdout"
+                directory.mkdir()
+                args = step_two_command(PROJECT, root / "blind" / "order.json", run["memory"])
+                output = subprocess.check_output(args + ["--read-only"], cwd=directory,
+                                                 stdin=subprocess.DEVNULL, text=True)
+                exact = json.loads(output)
+                self.assertEqual((exact["retrieved"], exact["action"]), ({}, "all-major"))
                 self.assertNotIn(blind["session"], {r["session"] for r in run["initial"] + run["attempts"]})
                 self.assertEqual([(r["action"], r["verdict"]) for r in run["replay"]],
                                  [("all-minor", "PASS"), ("all-major", "PASS")])

@@ -81,6 +81,8 @@ D2 v2 USD 12 1200 FAIL
 
 ## Step 2 · 跨进程复用一次成功的导入
 
+在仓库根目录运行 `.\demo-memory.ps1` 可复现实验。运行 `.\test.ps1` 可执行包含 Step 1 和 Step 2 在内的全部测试。
+
 会话 A 收到 checkout 项目的 v1/CNY 订单 A1，输入为 1250。每次尝试都调用原有导入器，写入单独的订单库。驱动程序 `demo_memory.py` 在导入完成后打开该库，调用 `scorer.py` 与独立的期望文件比较，并通过标准输入向 A 返回实际金额与 PASS/FAIL。默认策略失败后，A 尝试另一个策略；收到 PASS 时，A 在同一事务中记录成功事件、观察和技能，随后退出。
 
 | 记忆 | 本实验保存的内容 | 生命周期与引用 |
@@ -90,17 +92,18 @@ D2 v2 USD 12 1200 FAIL
 | 语义记忆 | checkout 的 v1/CNY 样例 A1 使用 all-minor 通过校验 | `observations.event_id` 指向通过校验的事件 |
 | 技能记忆 | 在相同范围内执行 all-minor 导入 | `skills.observation_id` 指向支持该动作的观察 |
 
-检索沿外键找到来源事件，精确匹配项目、接口版本和币种。订单编号和金额可以变化。三个对照各在新 Python 进程中接收项目、B1 订单文件和记忆库路径，各选一次策略。驱动程序等进程退出后才评分。每轮演示使用独立临时目录，结束时清理数据库。
+Step 2 的检索沿外键精确匹配来源事件的项目、接口版本和币种，即使库内已有后续阶段的修订，也只查询精确技能。订单编号和金额可以变化。三个对照都处理 B1（输入 2750）。每个新 Python 进程只读打开指定记忆库，关闭标准输入，选定一次策略并写入自己的新订单库。驱动程序等进程退出后，才只读打开订单库评分。每轮演示使用独立临时目录，结束时清理数据库。
 
 一次 `.\demo-memory.ps1` 的实际输出如下。PID 和会话 ID 随运行变化。
 
 ```text
-group pid order lookup action actual expected result provenance
-A 40840 A1 miss all-major 125000 1250 FAIL session=508b4292e173415d9ec49b9f21c9ba61 event=1
-A 40840 A1 miss all-minor 1250 1250 PASS session=508b4292e173415d9ec49b9f21c9ba61 event=2
-learned 40600 B1 hit all-minor 2750 2750 PASS skill=1 observation=1 session=508b4292e173415d9ec49b9f21c9ba61 event=2
-empty 41296 B1 miss all-major 275000 2750 FAIL -
-other-project 34620 B1 miss all-major 275000 2750 FAIL -
+group pid project version currency order input lookup action actual expected result provenance
+A 30524 checkout v1 CNY A1 1250 miss all-major 125000 1250 FAIL session=afefa3f3a9114bbb8f3376c9b8645d1d event=1
+A 30524 checkout v1 CNY A1 1250 miss all-minor 1250 1250 PASS session=afefa3f3a9114bbb8f3376c9b8645d1d event=2
+learned 16972 checkout v1 CNY B1 2750 hit all-minor 2750 2750 PASS skill=1 observation=1 session=afefa3f3a9114bbb8f3376c9b8645d1d event=2
+  observation 1: checkout v1/CNY sample A1 passed with all-minor.
+empty 31708 checkout v1 CNY B1 2750 miss all-major 275000 2750 FAIL -
+other-project 34952 billing v1 CNY B1 2750 miss all-major 275000 2750 FAIL -
 ```
 
 `other-project` 使用同一份已学习的记忆库和 B1 订单，仅将项目从 checkout 改为 billing。第二阶段的测试检查跨进程动作、金额、评分和来源链，逐项改变范围条件验证隔离，并验证连续两次 FAIL 只留下情景记忆。

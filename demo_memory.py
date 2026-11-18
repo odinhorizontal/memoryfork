@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from demo import DATA
+from memory_agent import initialize
 from scorer import score
 
 AGENT = DATA.parent / "memory_agent.py"
@@ -16,7 +17,8 @@ PROJECT = "checkout"
 
 
 def grade(directory, attempt, expected):
-    with closing(sqlite3.connect(directory / f"orders-{attempt}.sqlite")) as db:
+    orders = (directory / f"orders-{attempt}.sqlite").resolve().as_uri()
+    with closing(sqlite3.connect(orders + "?mode=ro", uri=True)) as db:
         row, = score(db, expected)
     order_id, version, currency, actual, target, verdict = row
     return dict(order_id=order_id, version=version, currency=currency,
@@ -24,7 +26,8 @@ def grade(directory, attempt, expected):
 
 
 def command(project, orders, memory):
-    return [sys.executable, str(AGENT), project, str(orders.resolve()), str(memory.resolve())]
+    return [sys.executable, str(AGENT), project, str(orders.resolve()), str(memory.resolve()),
+            "--exact"]
 
 
 def train(directory, memory, expected):
@@ -50,8 +53,12 @@ def train(directory, memory, expected):
 
 def probe(directory, project, memory):
     directory.mkdir()
-    cmd = command(project, DATA / "memory-b.json", memory)
-    attempt = json.loads(subprocess.check_output(cmd, cwd=directory, text=True))
+    if not memory.exists() or memory.stat().st_size == 0:
+        with closing(sqlite3.connect(memory)) as db:
+            initialize(db)
+    cmd = command(project, DATA / "memory-b.json", memory) + ["--read-only"]
+    attempt = json.loads(subprocess.check_output(cmd, cwd=directory, text=True,
+                                                 stdin=subprocess.DEVNULL))
     return {**attempt, **grade(directory, 1, DATA / "memory-b.expected.json")}
 
 
@@ -71,7 +78,7 @@ def experiment(root):
 def main():
     with TemporaryDirectory() as tmp:
         training, probes = experiment(Path(tmp))
-        print("group pid order lookup action actual expected result provenance")
+        print("group pid project version currency order input lookup action actual expected result provenance")
         for group, row in [*(("A", r) for r in training), *probes.items()]:
             hit = row["retrieved"]
             source = "-"
@@ -80,8 +87,11 @@ def main():
             elif hit:
                 source = (f"skill={hit['skill_id']} observation={hit['observation_id']} "
                           f"session={hit['source_session']} event={hit['event_id']}")
-            print(group, row["pid"], row["order_id"], "hit" if hit else "miss", row["action"],
+            print(group, row["pid"], row["project"], row["version"], row["currency"],
+                  row["order_id"], row["input_amount"], "hit" if hit else "miss", row["action"],
                   row["actual"], row["target"], row["verdict"], source)
+            if hit:
+                print(f"  observation {hit['observation_id']}: {hit['observation']}")
 
 
 if __name__ == "__main__":

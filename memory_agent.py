@@ -44,11 +44,13 @@ def initialize(db):
 
 def retrieve(db, project, version, currency):
     revision = retrieve_revision(db, project, version, currency)
-    if revision:
-        return revision
+    return revision or retrieve_exact(db, project, version, currency)
+
+
+def retrieve_exact(db, project, version, currency):
     # The observation and skill inherit their scope through the source event.
     row = db.execute("""
-        SELECT s.id AS skill_id, o.id AS observation_id, e.id AS event_id,
+        SELECT s.id AS skill_id, o.id AS observation_id, o.observation, e.id AS event_id,
                e.session AS source_session, s.action
         FROM skills s JOIN observations o ON o.id = s.observation_id
         JOIN events e ON e.id = o.event_id
@@ -87,6 +89,8 @@ def main():
     parser.add_argument("project")
     parser.add_argument("orders", type=Path)
     parser.add_argument("memory", type=Path)
+    parser.add_argument("--exact", action="store_true",
+                        help="only reuse a skill matching project, version and currency")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--learn", action="store_true")
     mode.add_argument("--read-only", action="store_true")
@@ -99,12 +103,14 @@ def main():
         db.row_factory = sqlite3.Row
         if not args.read_only:
             initialize(db)
-        hit = retrieve(db, args.project, order["version"], order["currency"])
+        lookup = retrieve_exact if args.exact else retrieve
+        hit = lookup(db, args.project, order["version"], order["currency"])
         work = WorkingMemory(order, args.project, hit, hit.get("action", "all-major"))
         for attempt in range(1, 3 if args.learn else 2):
             with closing(sqlite3.connect(f"orders-{attempt}.sqlite")) as orders_db:
                 import_orders(orders_db, args.orders, work.action)
-            emit(attempt=attempt, pid=os.getpid(), session=session,
+            emit(attempt=attempt, pid=os.getpid(), session=session, project=work.project,
+                 input_amount=order["amount"],
                  retrieved=work.retrieved, action=work.action)
             if not args.learn:
                 return
