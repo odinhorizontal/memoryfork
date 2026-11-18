@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MemoryFork · 记忆实验回放</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap toolbar">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">⑂</span> MemoryFork</div>
+      <span class="local"><i></i>本地回放</span>
+    </div>
+  </header>
+  <main class="wrap">
+    <header class="page-heading">
+      <div><h1>记忆实验回放</h1><p id="run-meta">正在读取本地实验…</p></div>
+      <div class="run-controls">
+        <label>已保存的实验<select id="run-picker" disabled></select></label>
+        <button id="create-run" type="button" disabled>＋ 新建实验</button>
+      </div>
+    </header>
+    <p id="notice" role="status" aria-live="polite" hidden></p>
+    <div id="workspace" hidden>
+      <section aria-labelledby="overview-heading">
+        <h2 id="overview-heading">环境对照</h2>
+        <div id="inputs"></div>
+        <div class="env-grid" id="summaries"></div>
+      </section>
+      <section class="investigate" aria-labelledby="timeline-heading">
+        <div class="section-heading">
+          <h2 id="timeline-heading">证据时间线</h2>
+          <div id="environment-picker" role="group" aria-label="选择回放环境"></div>
+        </div>
+        <div class="timeline-shell">
+          <nav id="timeline" aria-label="实验步骤"></nav>
+          <div class="details-grid">
+            <article id="step-detail" tabindex="-1"></article>
+            <aside id="memory" aria-label="四层记忆"></aside>
+          </div>
+        </div>
+      </section>
+      <section class="comparison" aria-labelledby="compare-heading">
+        <div class="section-heading">
+          <div><h2 id="compare-heading">禁用修订对照</h2><p id="compare-context"></p></div>
+          <button class="primary" id="compare-button" type="button">禁用此修订，重跑</button>
+        </div>
+        <div id="compare-status" role="status" aria-live="polite"></div>
+        <div id="comparison-results"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

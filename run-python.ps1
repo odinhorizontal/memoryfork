@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory, Position=0, ParameterSetName='Script')][string]$Script,
-    [Parameter(Mandatory, ParameterSetName='Tests')][switch]$DiscoverTests
+    [Parameter(Mandatory, ParameterSetName='Tests')][switch]$DiscoverTests,
+    [Parameter(ParameterSetName='Script')][string[]]$ScriptArguments = @()
 )
 $ErrorActionPreference = 'Stop'
 $candidates = @('python', 'py', "$env:USERPROFILE\anaconda3\python.exe")
@@ -16,7 +17,7 @@ foreach ($candidate in $candidates) {
     if ($DiscoverTests) {
         & $command.Source @options -m unittest discover -v -s $PSScriptRoot
     } else {
-        & $command.Source @options (Join-Path $PSScriptRoot $Script)
+        & $command.Source @options (Join-Path $PSScriptRoot $Script) @ScriptArguments
     }
     exit $LASTEXITCODE
 }
